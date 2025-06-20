@@ -26,20 +26,27 @@ import {
   Sparkles,
   Wifi,
   WifiOff,
+  Volume2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 type MessageType = {
   id: string;
-  type: "USER_INPUT" | "AI_RESPONSE" | "SYSTEM";
-  content: string;
+  type: "USER_INPUT" | "AI_RESPONSE" | "SYSTEM" | "AUDIO";
+  content: string | AudioContent;
   timestamp: Date;
 };
 
 type WebSocketMessage = {
-  type: "USER_INPUT" | "AI_RESPONSE" | "SYSTEM";
-  content: string;
+  type: "USER_INPUT" | "AI_RESPONSE" | "SYSTEM" | "AUDIO";
+  content: string | AudioContent;
   timestamp: string;
+};
+
+type AudioContent = {
+  audioData: string; // Base64 encoded audio data
+  format: string; // Audio format (e.g., "mp3", "wav")
+  mimeType: string; // MIME type (e.g., "audio/mpeg", "audio/wav")
 };
 
 const formatTime = (timestamp: Date): string => {
@@ -57,6 +64,8 @@ const getMessageBadgeColor = (type: MessageType["type"]): string => {
       return "bg-green-50 text-green-700 border-green-200";
     case "SYSTEM":
       return "bg-gray-50 text-gray-700 border-gray-200";
+    case "AUDIO":
+      return "bg-purple-50 text-purple-700 border-purple-200";
     default:
       return "bg-gray-50 text-gray-700 border-gray-200";
   }
@@ -70,6 +79,37 @@ export default function Dashboard() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Function to play audio from base64 data
+  const playAudio = async (audioContent: AudioContent) => {
+    try {
+      // Create audio element if it doesn't exist
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+      }
+
+      // Convert base64 to blob URL
+      const audioBlob = new Blob(
+        [Uint8Array.from(atob(audioContent.audioData), c => c.charCodeAt(0))],
+        { type: audioContent.mimeType }
+      );
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      audioRef.current.src = audioUrl;
+      
+      // Play the audio
+      await audioRef.current.play();
+      
+      // Clean up the blob URL after playing
+      audioRef.current.addEventListener('ended', () => {
+        URL.revokeObjectURL(audioUrl);
+      }, { once: true });
+      
+    } catch (error) {
+      console.error('Error playing audio:', error);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -78,20 +118,25 @@ export default function Dashboard() {
   useEffect(() => {
     if (typeof window === "undefined" || !session?.user) return;
 
-    const backendUrl = process.env.NODE_ENV == "production"
-      ? process.env.NEXT_PUBLIC_AUTH_BASE_URL
-      : "http://localhost:8000";
-    
+    const backendUrl =
+      process.env.NODE_ENV == "production"
+        ? process.env.NEXT_PUBLIC_AUTH_BASE_URL
+        : "http://localhost:8000";
+
     if (!backendUrl) {
       console.error("Backend URL is not configured");
       return;
     }
-    
-    const wsUrl = backendUrl.replace(/^https?:/, backendUrl.startsWith("https") ? "wss:" : "ws:") + "/ws";
+
+    const wsUrl =
+      backendUrl.replace(
+        /^https?:/,
+        backendUrl.startsWith("https") ? "wss:" : "ws:"
+      ) + "/ws";
 
     const ws = new WebSocket(wsUrl);
 
-    const addMessage = (type: MessageType["type"], content: string) => {
+    const addMessage = (type: MessageType["type"], content: string | AudioContent) => {
       setMessages((prev) => [
         ...prev,
         {
@@ -110,14 +155,30 @@ export default function Dashboard() {
       try {
         const parsedMessage: WebSocketMessage = JSON.parse(event.data);
 
-        const content =
-          typeof parsedMessage.content === "string"
+        let content: string | AudioContent;
+        
+        if (parsedMessage.type === "AUDIO") {
+          // For audio messages, the content should be an AudioContent object
+          if (typeof parsedMessage.content === "object" && parsedMessage.content !== null) {
+            content = parsedMessage.content as AudioContent;
+          } else {
+            console.error("Invalid audio content format:", parsedMessage.content);
+            return;
+          }
+        } else {
+          content = typeof parsedMessage.content === "string"
             ? parsedMessage.content
             : JSON.stringify(parsedMessage.content, null, 2);
+        }
 
         // Skip USER_INPUT messages to avoid duplicates (handled optimistically)
         if (parsedMessage.type !== "USER_INPUT") {
           addMessage(parsedMessage.type, content);
+          
+          // Auto-play audio if message type is AUDIO
+          if (parsedMessage.type === "AUDIO" && typeof content === "object" && content.audioData) {
+            playAudio(content as AudioContent);
+          }
         }
       } catch (error) {
         // Handle malformed JSON as system message
@@ -285,9 +346,18 @@ export default function Dashboard() {
 
                   {/* Message content */}
                   <div className="bg-transparent">
-                    <MessageContent markdown className="bg-transparent p-0">
-                      {message.content as string}
-                    </MessageContent>
+                    {message.type === "AUDIO" ? (
+                      <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                        <Volume2 className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm text-purple-700">
+                          Audio message received and played automatically
+                        </span>
+                      </div>
+                    ) : (
+                      <MessageContent markdown className="bg-transparent p-0">
+                        {typeof message.content === "string" ? message.content : "Audio content"}
+                      </MessageContent>
+                    )}
                   </div>
                 </div>
               </Message>
