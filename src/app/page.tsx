@@ -17,14 +17,18 @@ export default function Home() {
   }, [session, router]);
 
   const signIn = async () => {
-    await auth.signIn.social({
-      provider: "google",
-      callbackURL: `${
-        process.env.NODE_ENV == "production"
-          ? process.env.NEXT_PUBLIC_FRONTEND_URL
-          : "http://localhost:3000"
-      }/dashboard`,
-    });
+    try {
+      await auth.signIn.social({
+        provider: "google",
+        callbackURL: `${
+          process.env.NODE_ENV == "production"
+            ? process.env.NEXT_PUBLIC_FRONTEND_URL
+            : "http://localhost:3000"
+        }/dashboard`,
+      });
+    } catch (error) {
+      console.log("Sign-in error:", error);
+    }
   };
 
   if (isPending) {
