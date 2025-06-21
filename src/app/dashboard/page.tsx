@@ -27,6 +27,7 @@ import {
   Wifi,
   WifiOff,
   Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -78,11 +79,18 @@ export default function Dashboard() {
   const [input, setInput] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Function to play audio from base64 data
   const playAudio = async (audioContent: AudioContent) => {
+    // Only play audio if audio is enabled
+    if (!audioEnabled) {
+      console.log('Audio playback is disabled');
+      return;
+    }
+
     try {
       // Create audio element if it doesn't exist
       if (!audioRef.current) {
@@ -132,7 +140,7 @@ export default function Dashboard() {
       backendUrl.replace(
         /^https?:/,
         backendUrl.startsWith("https") ? "wss:" : "ws:"
-      ) + "/ws";
+      ) + `/ws?audio=${audioEnabled}`;
 
     const ws = new WebSocket(wsUrl);
 
@@ -225,7 +233,7 @@ export default function Dashboard() {
       ws.removeEventListener("error", handleError);
       ws.close();
     };
-  }, [session?.user]);
+  }, [session?.user, audioEnabled]); // Add audioEnabled to dependency array
 
   const handleSubmit = () => {
     if (!socket || socket.readyState !== WebSocket.OPEN || !input.trim()) {
@@ -283,6 +291,28 @@ export default function Dashboard() {
   return (
     <>
       <div className="flex flex-col max-w-3xl mx-auto p-4 h-[90vh]">
+        {/* Audio Control Button */}
+        <div className="flex justify-end mb-4">
+          <Button
+            variant={audioEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => setAudioEnabled(!audioEnabled)}
+            className="flex items-center gap-2"
+          >
+            {audioEnabled ? (
+              <>
+                <Volume2 className="w-4 h-4" />
+                Audio On
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-4 h-4" />
+                Audio Off
+              </>
+            )}
+          </Button>
+        </div>
+
         <div className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 border rounded-lg p-4 mb-4 overflow-y-auto space-y-4">
             {messages.length === 0 && isConnected && (
