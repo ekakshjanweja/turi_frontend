@@ -5,7 +5,4 @@ export const auth = createAuthClient({
     process.env.NODE_ENV == "production"
       ? process.env.NEXT_PUBLIC_AUTH_BASE_URL
       : "http://localhost:8000",
-  fetchOptions: {
-    credentials: "same-origin",
-  },
 });
